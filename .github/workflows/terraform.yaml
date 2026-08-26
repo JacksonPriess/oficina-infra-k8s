@@ -21,7 +21,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Configurar credenciais AWS
         uses: aws-actions/configure-aws-credentials@v6
@@ -79,3 +79,24 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform apply -auto-approve
+
+      - name: Configurar acesso ao EKS
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          aws eks update-kubeconfig \
+            --region "$AWS_REGION" \
+            --name oficina-api-dev-cluster
+
+      - name: Instalar Metrics Server
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+
+      - name: Validar Metrics Server
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          kubectl rollout status deployment/metrics-server \
+            -n kube-system \
+            --timeout=180s
+
+          kubectl get deployment metrics-server -n kube-system        
