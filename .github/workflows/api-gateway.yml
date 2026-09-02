@@ -1,0 +1,99 @@
+name: API Gateway
+
+on:
+  workflow_dispatch:
+
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "terraform-api-gateway/**"
+      - ".github/workflows/api-gateway.yml"
+
+  push:
+    branches:
+      - main
+    paths:
+      - "terraform-api-gateway/**"
+      - ".github/workflows/api-gateway.yml"
+
+env:
+  AWS_REGION: us-east-1
+  EKS_CLUSTER_NAME: oficina-api-dev-cluster
+  TF_WORKING_DIR: ./terraform-api-gateway
+
+jobs:
+
+  terraform:
+    name: Terraform API Gateway
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+
+      - name: Terraform Format
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform fmt -check
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init
+
+      - name: Terraform Validate
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform validate
+
+      # Acessar o Kubernetes para descobrir o endereço atual do LoadBalancer.
+      - name: Configure kubectl
+        run: |
+          aws eks update-kubeconfig \
+            --region "$AWS_REGION" \
+            --name "$EKS_CLUSTER_NAME"
+
+      - name: Get backend LoadBalancer
+        id: backend
+        run: |
+          LB_HOST=$(kubectl get svc oficina-api-service \
+            -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+
+          if [ -z "$LB_HOST" ]; then
+            echo "LoadBalancer da aplicação não encontrado."
+            exit 1
+          fi
+
+          BACKEND_URL="http://$LB_HOST"
+
+          echo "Backend encontrado: $BACKEND_URL"
+          echo "backend_url=$BACKEND_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Terraform Plan
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform plan \
+            -var="backend_url=${{ steps.backend.outputs.backend_url }}"
+
+      - name: Terraform Apply
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform apply \
+            -auto-approve \
+            -var="backend_url=${{ steps.backend.outputs.backend_url }}"
+
+      - name: Show API Gateway URL
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform output api_gateway_url
