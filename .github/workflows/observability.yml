@@ -1,0 +1,61 @@
+name: Deploy Observability
+
+on:
+  workflow_dispatch:
+
+  push:
+    branches:
+      - main
+    paths:
+      - "observability/**"
+      - ".github/workflows/observability.yml"
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  EKS_CLUSTER_NAME: oficina-api-dev-cluster
+
+jobs:
+  deploy-observability:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. Checkout
+        uses: actions/checkout@v6
+
+      - name: 2. Configurar credenciais AWS
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: 3. Configurar acesso ao EKS
+        run: |
+          aws eks update-kubeconfig \
+            --region "$AWS_REGION" \
+            --name "$EKS_CLUSTER_NAME"
+
+      - name: 4. Validar acesso ao cluster
+        run: |
+          kubectl get nodes
+
+      - name: 5. Adicionar repositório Helm da New Relic
+        run: |
+          helm repo add newrelic https://helm-charts.newrelic.com
+          helm repo update
+
+      - name: 6. Instalar ou atualizar New Relic Kubernetes Integration
+        run: |
+          helm upgrade --install newrelic-bundle newrelic/nri-bundle \
+            --namespace newrelic \
+            --create-namespace \
+            --values observability/newrelic-values.yaml \
+            --set global.licenseKey="${{ secrets.NEW_RELIC_LICENSE_KEY }}"
+
+      - name: 7. Validar componentes New Relic
+        run: |
+          kubectl get pods -n newrelic
