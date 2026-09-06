@@ -1,0 +1,17 @@
+global:
+  cluster: oficina-api-dev-cluster
+  lowDataMode: true
+
+# Coleta informações sobre a infraestrutura do Kubernetes  ( nodes, pods, containers, cpu, memory, deployments, etc) 
+newrelic-infrastructure:
+  enabled: true
+  privileged: true # Permite que o agente tenha o nível de acesso necessário no node para coletar as métricas do host/container.
+
+# Observa o estado declarado e atual dos objetos Kubernetes.
+# kube-state-metrics para obter métricas em nível de cluster.
+kube-state-metrics:
+  enabled: true
+
+# Permite enviar eventos Kubernetes para a New Relic.
+kubeEvents:
+  enabled: true
