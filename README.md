@@ -28,7 +28,7 @@ Este repositório é responsável por:
 
 ## 🏗️ Arquitetura específica deste repositório
 
-![Arquitetura da infraestrutura Kubernetes](docs/oficina-infra-k8s-architecture.png)
+![Arquitetura da infraestrutura Kubernetes](docs/architecture/oficina-infra-k8s-architecture.drawio.png)
 
 O repositório mantém três blocos principais:
 
