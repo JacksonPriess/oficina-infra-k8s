@@ -1,176 +1,108 @@
-# ☁️ Oficina Dinoco - Infraestrutura Kubernetes e API Gateway
+# ☁️ Oficina Dinoco - Infraestrutura Kubernetes, API Gateway e Observabilidade
 
-Repositório responsável pela infraestrutura AWS utilizada pela aplicação **Oficina Dinoco**, contemplando a infraestrutura base do Kubernetes/EKS e a camada de entrada da solução através do **AWS API Gateway**.
+Repositório responsável pela infraestrutura AWS utilizada pela solução **Oficina Dinoco**, com foco em rede, Kubernetes/EKS, registro de imagens, API Gateway e observabilidade do cluster.
 
-Este repositório faz parte da Fase 3 do projeto de pós-graduação em Arquitetura de Software e foi separado da aplicação principal para permitir ciclos independentes de provisionamento, deploy e evolução da infraestrutura.
-
----
-
-## 🎯 Objetivos do repositório
-
-Este repositório é responsável por provisionar e manter:
-
-- VPC da solução;
-- Subnets utilizadas pelos recursos AWS;
-- Internet Gateway e rotas de rede;
-- Cluster Amazon EKS;
-- Node Group EC2;
-- Amazon ECR;
-- Metrics Server utilizado pelo Kubernetes HPA;
-- AWS API Gateway HTTP API;
-- Integração do API Gateway com a Lambda de autenticação;
-- Integração do API Gateway com a aplicação Spring Boot executada no EKS;
-- Estados Terraform independentes para infraestrutura Kubernetes e API Gateway.
+Este repositório foi separado da aplicação principal para permitir ciclos independentes de provisionamento e evolução da infraestrutura.
 
 ---
 
-# 🏗️ Arquitetura
+## 🎯 Objetivo do repositório
 
-A arquitetura atual possui o **API Gateway como ponto de entrada principal da solução**.
+Este repositório é responsável por:
+
+- provisionar a VPC e Subnets da solução;
+- criar Internet Gateway e rotas de rede;
+- provisionar o Amazon EKS;
+- criar o EC2 Node Group do cluster;
+- criar o Amazon ECR utilizado pela aplicação;
+- instalar o Kubernetes Metrics Server;
+- disponibilizar a infraestrutura necessária para uso do HPA;
+- provisionar o AWS API Gateway;
+- integrar o API Gateway com a Auth Lambda e com a aplicação no EKS;
+- instalar a integração Kubernetes do New Relic;
+- manter estados Terraform separados para EKS e API Gateway.
+
+> A aplicação Spring Boot, o banco PostgreSQL e a Lambda de autenticação são mantidos em repositórios próprios.
+
+---
+
+## 🏗️ Arquitetura específica deste repositório
+
+![Arquitetura da infraestrutura Kubernetes](docs/oficina-infra-k8s-architecture.png)
+
+O repositório mantém três blocos principais:
+
+1. **Infraestrutura base** — VPC, Subnets, EKS, EC2 Node Group e ECR.
+2. **Entrada da solução** — API Gateway e suas integrações.
+3. **Observabilidade Kubernetes** — New Relic Kubernetes Integration instalada no cluster.
+
+O fluxo principal é:
 
 ```text
-                         Internet
-                            |
-                            v
-                    ┌────────────────┐
-                    │  API Gateway   │
-                    └───────┬────────┘
-                            |
-              +-------------+-------------+
-              |                           |
-              v                           v
-      POST /auth/cliente             Demais rotas
-              |                           |
-              v                           v
-       Auth Lambda                 Load Balancer
-              |                           |
-              |                           v
-              |                          EKS
-              |                           |
-              |                           v
-              |                     Spring Boot
-              |
-              v
-       Autenticação CPF
+Usuário / Sistema Externo
+          |
+          v
+     API Gateway
+       /      \
+      /        \
+Auth Lambda   Load Balancer
+                 |
+                 v
+                EKS
+                 |
+        Spring Boot Pods
+
+Dentro do EKS:
+- Metrics Server
+- HPA
+- New Relic Kubernetes Integration (nri-bundle)
 ```
-
-O API Gateway decide o destino de acordo com a rota:
-
-```text
-POST /auth/cliente
-        ↓
-AWS Lambda
-
-ANY /{proxy+}
-        ↓
-Load Balancer
-        ↓
-Spring Boot / EKS
-```
-
-Dessa forma, a Lambda de autenticação é executada somente quando necessária.
 
 ---
 
-# 📦 Separação dos repositórios
-
-A solução foi dividida em repositórios independentes.
-
-### `oficina-infra-k8s`
-
-Responsável por:
-
-- VPC;
-- Subnets;
-- Internet Gateway;
-- EKS;
-- Node Groups EC2;
-- ECR;
-- Metrics Server;
-- API Gateway;
-- integrações de entrada da aplicação.
-
-### `oficina-infra-db`
-
-Responsável por:
-
-- RDS PostgreSQL;
-- DB Subnet Group;
-- Security Group do banco;
-- credenciais do banco gerenciadas pelo AWS Secrets Manager.
-
-### `oficina-auth-lambda`
-
-Responsável por:
-
-- AWS Lambda para autenticação de clientes;
-- validação de CPF;
-- consulta do cliente no PostgreSQL;
-- verificação de existência/status;
-- geração de JWT;
-- Secret utilizado na assinatura dos tokens;
-- VPC Endpoint para acesso privado ao Secrets Manager.
-
-### `oficina-dinoco`
-
-Responsável por:
-
-- aplicação Java/Spring Boot;
-- regras de negócio;
-- autenticação dos funcionários;
-- Dockerfile;
-- migrations Flyway;
-- manifestos Kubernetes;
-- build e publicação da imagem;
-- deploy da aplicação no EKS.
-
----
-
-# 📁 Estrutura do repositório
+## 📁 Estrutura do repositório
 
 ```text
 oficina-infra-k8s/
 ├── .github/
 │   └── workflows/
-│       ├── terraform.yml
-│       └── api-gateway.yml
+│       ├── terraform.yaml
+│       ├── api-gateway.yml
+│       └── observability.yml
+│
+├── observability/
+│   └── newrelic-values.yaml
 │
 ├── terraform/
 │   ├── backend.tf
 │   ├── ecr.tf
 │   ├── eks.tf
+│   ├── locals.tf
 │   ├── network.tf
 │   ├── outputs.tf
 │   ├── providers.tf
 │   └── .terraform.lock.hcl
 │
 ├── terraform-api-gateway/
+│   ├── api-gateway.tf
 │   ├── backend.tf
+│   ├── outputs.tf
 │   ├── providers.tf
 │   ├── remote-states.tf
 │   ├── variables.tf
-│   ├── api-gateway.tf
-│   └── outputs.tf
+│   └── .terraform.lock.hcl
 │
 ├── .gitignore
 └── README.md
 ```
 
-A infraestrutura foi dividida em dois estados Terraform para evitar acoplamento desnecessário entre o ciclo de vida do EKS e o API Gateway.
-
 ---
 
-# 🌐 Infraestrutura Kubernetes
+## ☁️ Recursos provisionados
 
-A pasta:
+### Infraestrutura Kubernetes
 
-```text
-terraform/
-```
-
-contém a infraestrutura base da solução.
-
-Principais recursos:
+A pasta `terraform/` provisiona:
 
 ```text
 VPC
@@ -181,186 +113,137 @@ VPC
 
 EKS
 ├── Control Plane
-└── Node Group EC2
+└── EC2 Node Group
 
 ECR
 └── Repositório Docker da aplicação
 ```
 
-O Node Group do EKS utiliza instâncias EC2 para executar os Pods da aplicação.
+O Node Group utiliza instâncias EC2 para executar os Pods da aplicação.
 
----
+### API Gateway
 
-# 📊 Metrics Server e HPA
+A pasta `terraform-api-gateway/` mantém o Terraform do API Gateway em state independente.
 
-A aplicação utiliza Kubernetes Horizontal Pod Autoscaler (HPA).
-
-O Metrics Server fornece ao Kubernetes métricas de utilização de CPU e memória necessárias para o funcionamento do HPA.
-
-A instalação é realizada através da pipeline de infraestrutura:
-
-```bash
-kubectl apply -f \
-https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
-```
-
-Após instalado, é possível verificar as métricas através de:
-
-```bash
-kubectl top nodes
-kubectl top pods
-```
-
-Exemplo de configuração do HPA utilizada pela aplicação:
-
-```text
-mínimo: 1 réplica
-máximo: 3 réplicas
-CPU alvo: 70%
-```
-
----
-
-# 🚪 API Gateway
-
-O API Gateway possui um Terraform próprio dentro do mesmo repositório:
-
-```text
-terraform-api-gateway/
-```
-
-O state é armazenado separadamente:
-
-```text
-infra/api-gateway/terraform.tfstate
-```
-
-Isso evita uma dependência circular entre:
-
-```text
-EKS
-Lambda
-API Gateway
-```
-
-O Gateway pode ser criado, alterado ou destruído sem alterar diretamente o state principal do EKS.
-
----
-
-## Roteamento do API Gateway
-
-O API Gateway utiliza uma **HTTP API**.
-
-### Autenticação do cliente
+Principais rotas:
 
 ```text
 POST /auth/cliente
         ↓
 AWS Lambda
-```
 
-A integração utiliza:
-
-```text
-AWS_PROXY
-Payload version 2.0
-```
-
-A Lambda recebe o evento HTTP do API Gateway, valida o CPF do cliente e devolve um JWT.
-
----
-
-### Aplicação Spring Boot
-
-As demais requisições são encaminhadas através de uma rota proxy:
-
-```text
 ANY /{proxy+}
+        ↓
+Load Balancer
+        ↓
+Service Kubernetes
+        ↓
+Spring Boot / EKS
 ```
 
-Fluxo:
+A separação do state do API Gateway evita acoplamento com o ciclo de vida da infraestrutura principal do EKS.
+
+---
+
+## 📊 Metrics Server e HPA
+
+O Kubernetes Metrics Server é instalado para fornecer métricas utilizadas pelo Horizontal Pod Autoscaler.
+
+Exemplo da configuração atual da aplicação:
 
 ```text
-API Gateway
-     ↓
-HTTP_PROXY
-     ↓
-Load Balancer Kubernetes
-     ↓
-Service
-     ↓
-Pod Spring Boot
+Mínimo: 1 réplica
+Máximo: 3 réplicas
+CPU alvo: 70%
 ```
 
-Exemplo:
+Comandos úteis:
+
+```bash
+kubectl top nodes
+kubectl top pods
+kubectl get hpa
+```
+
+> O manifesto do HPA da aplicação permanece no repositório `oficina-dinoco`. Este repositório disponibiliza a infraestrutura e as métricas necessárias para seu funcionamento.
+
+---
+
+## 📈 Observabilidade com New Relic
+
+A observabilidade Kubernetes é instalada através do workflow:
 
 ```text
-POST /api/auth/login
+.github/workflows/observability.yml
 ```
 
-é encaminhado para:
+e configurada pelo arquivo:
 
 ```text
-LoadBalancer
-    ↓
-/api/auth/login
+observability/newrelic-values.yaml
 ```
 
-O Gateway preserva o fluxo já existente da aplicação, incluindo headers como:
+A instalação utiliza o Helm chart `newrelic/nri-bundle`.
 
-```http
-Authorization: Bearer <JWT>
+Os componentes executados dentro do EKS coletam informações como:
+
+- CPU e memória;
+- nodes;
+- Pods e containers;
+- quantidade de réplicas;
+- restarts;
+- estado dos recursos Kubernetes;
+- eventos do cluster.
+
+Os dados coletados são enviados para o **New Relic SaaS**.
+
+Fluxo simplificado:
+
+```text
+Amazon EKS
+├── Aplicação
+├── Metrics Server
+└── New Relic Kubernetes Integration
+        |
+        | HTTPS
+        v
+   New Relic SaaS
+```
+
+### Secret necessário
+
+O workflow de observabilidade utiliza:
+
+```text
+NEW_RELIC_LICENSE_KEY
+```
+
+armazenado como GitHub Repository Secret.
+
+### Instalação manual
+
+Caso necessário:
+
+```bash
+helm repo add newrelic https://helm-charts.newrelic.com
+helm repo update
+
+helm upgrade --install newrelic-bundle newrelic/nri-bundle   --namespace newrelic   --create-namespace   --values observability/newrelic-values.yaml   --set global.licenseKey="$NEW_RELIC_LICENSE_KEY"
+```
+
+Verificação:
+
+```bash
+kubectl get pods -n newrelic
 ```
 
 ---
 
-# 🔐 Dois fluxos de autenticação
+## 🔄 Terraform Remote State
 
-A solução mantém dois mecanismos distintos.
+Os estados Terraform são armazenados remotamente no Amazon S3.
 
-### Funcionários
-
-Funcionários continuam utilizando a autenticação da aplicação principal:
-
-```text
-Funcionário
-   ↓
-e-mail + senha
-   ↓
-API Gateway
-   ↓
-Spring Boot
-   ↓
-JWT funcionário
-```
-
-### Clientes
-
-Clientes utilizam o fluxo serverless:
-
-```text
-Cliente
-   ↓
-CPF
-   ↓
-API Gateway
-   ↓
-Auth Lambda
-   ↓
-PostgreSQL
-   ↓
-JWT CLIENTE
-```
-
-Esses dois modelos coexistem sem necessidade de alterar o fluxo já existente dos funcionários.
-
----
-
-# 🔄 Remote State
-
-O Terraform utiliza estados remotos armazenados no Amazon S3.
-
-Exemplos:
+Principais states relacionados à solução:
 
 ```text
 infra/k8s/terraform.tfstate
@@ -369,78 +252,22 @@ infra/auth-lambda/terraform.tfstate
 infra/api-gateway/terraform.tfstate
 ```
 
-O Terraform do API Gateway lê outputs do state da Lambda para obter informações como:
+Neste repositório:
 
-```text
-lambda_function_name
-lambda_function_arn
-lambda_invoke_arn
-```
+- `terraform/` utiliza o state da infraestrutura Kubernetes;
+- `terraform-api-gateway/` utiliza state próprio e consulta outputs de outros componentes quando necessário.
 
-Isso permite integrar os recursos sem recriá-los ou duplicar responsabilidade entre repositórios.
+> O bucket S3 utilizado como backend precisa existir antes do primeiro `terraform init`. O bootstrap desse bucket deve ser tratado separadamente do Terraform que depende dele.
 
 ---
 
-# 📤 Outputs da infraestrutura Kubernetes
+## 🚀 CI/CD
 
-Entre os principais outputs do Terraform estão:
+Este repositório possui três workflows principais.
 
-```text
-vpc_id
-vpc_cidr_block
-public_subnet_a_id
-public_subnet_b_id
-eks_cluster_name
-eks_cluster_endpoint
-ecr_repository_url
-```
+### `terraform.yaml`
 
-Esses outputs podem ser consumidos por outros states Terraform.
-
----
-
-# 📤 Outputs do API Gateway
-
-O Terraform específico do Gateway disponibiliza:
-
-```text
-api_gateway_id
-api_gateway_url
-```
-
-Exemplo:
-
-```bash
-terraform output api_gateway_url
-```
-
-Retorno esperado:
-
-```text
-https://xxxxxxxx.execute-api.us-east-1.amazonaws.com
-```
-
-Essa URL passa a ser a entrada principal para consumo das APIs.
-
----
-
-# 🚀 CI/CD
-
-Este repositório possui pipelines independentes para os dois conjuntos de infraestrutura.
-
-## Pipeline `terraform.yml`
-
-Responsável pela infraestrutura:
-
-```text
-VPC
-EKS
-EC2 Node Group
-ECR
-Metrics Server
-```
-
-Fluxo simplificado:
+Responsável pela infraestrutura base:
 
 ```text
 Checkout
@@ -449,11 +276,9 @@ AWS Credentials
    ↓
 Terraform Setup
    ↓
-terraform fmt
+terraform fmt / validate
    ↓
 terraform init
-   ↓
-terraform validate
    ↓
 terraform plan
    ↓
@@ -468,9 +293,7 @@ Em Pull Requests são executadas validações e `terraform plan`.
 
 O `terraform apply` é executado após merge/push na `main`.
 
----
-
-## Pipeline `api-gateway.yml`
+### `api-gateway.yml`
 
 Responsável exclusivamente pelo API Gateway.
 
@@ -483,49 +306,56 @@ AWS Credentials
    ↓
 Terraform Setup
    ↓
-terraform fmt
-   ↓
-terraform init
-   ↓
-terraform validate
+terraform init / validate
    ↓
 configura kubectl
    ↓
-descobre Load Balancer atual
+descobre Load Balancer da aplicação
    ↓
 terraform plan
    ↓
 terraform apply
 ```
 
-O hostname do Load Balancer não fica fixo no Terraform.
-
-A pipeline obtém dinamicamente o endereço:
+O hostname do Load Balancer é obtido dinamicamente:
 
 ```bash
-kubectl get svc oficina-api-service \
-  -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+kubectl get svc oficina-api-service   -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
 ```
 
-e o fornece ao Terraform como:
+e fornecido ao Terraform como `backend_url`.
+
+### `observability.yml`
+
+Responsável pela integração Kubernetes do New Relic.
+
+Fluxo:
 
 ```text
-backend_url
+Checkout
+   ↓
+AWS Credentials
+   ↓
+Configura kubeconfig
+   ↓
+Helm repo New Relic
+   ↓
+helm upgrade --install
+   ↓
+Valida Pods no namespace newrelic
 ```
-
-Isso é importante porque o endereço do Load Balancer pode mudar após recriação do AWS LAB.
 
 ---
 
-# 🧪 Execução manual - infraestrutura EKS
+## 🧪 Execução manual - infraestrutura EKS
 
-Configure o profile utilizado pelo AWS LAB:
+Configure o profile do AWS LAB se necessário:
 
 ```powershell
-$env:AWS_PROFILE="pos"
+$env:AWS_PROFILE="profile"
 ```
 
-Entre no Terraform principal:
+Entre na pasta:
 
 ```bash
 cd terraform
@@ -544,9 +374,9 @@ terraform apply
 
 ---
 
-# 🧪 Execução manual - API Gateway
+## 🧪 Execução manual - API Gateway
 
-Antes de aplicar o Gateway, a aplicação precisa estar executando no EKS e possuir um `Service` do tipo `LoadBalancer`.
+A aplicação precisa estar executando no EKS e possuir um Service do tipo `LoadBalancer`.
 
 Obtenha o hostname:
 
@@ -557,7 +387,7 @@ $LB_HOST = kubectl get svc oficina-api-service `
 $BACKEND_URL = "http://$LB_HOST"
 ```
 
-Entre no Terraform:
+Entre na pasta:
 
 ```bash
 cd terraform-api-gateway
@@ -579,97 +409,58 @@ terraform apply `
 
 ---
 
-# 🧭 Ordem de provisionamento do AWS LAB
+## 🧭 Ordem de provisionamento do AWS LAB
 
-Após um Reset do ambiente AWS Academy, a ordem recomendada é:
+Após um reset do AWS Academy, a ordem recomendada é:
+
+Criar o bucket para states do terraform 
 
 ```text
 1. oficina-infra-k8s
-      ↓
    VPC + EKS + ECR
 
 2. oficina-infra-db
-      ↓
    PostgreSQL RDS
 
 3. oficina-auth-lambda
-      ↓
-   Lambda + Secrets + integração VPC
+   Lambda + integração VPC + Secrets
 
 4. oficina-dinoco
-      ↓
-   Docker + ECR + Deployment + Service
+   Build + Docker + ECR + Deployment + Service
 
 5. oficina-infra-k8s
-   workflow API Gateway
-      ↓
-   Gateway + integrações
+   Workflow do API Gateway
+
+6. oficina-infra-k8s
+   Workflow de Observabilidade
 ```
 
-O API Gateway é aplicado por último porque depende de:
+O API Gateway é aplicado depois porque depende da Lambda existente e do Load Balancer da aplicação.
 
-```text
-Lambda existente
-+
-Load Balancer da aplicação existente
-```
+A observabilidade pode ser instalada após o cluster EKS estar disponível.
 
 ---
 
-# 🔎 Comandos úteis Kubernetes
-
-Atualizar o kubeconfig:
+## 🔎 Comandos úteis Kubernetes
 
 ```bash
-aws eks update-kubeconfig \
-  --region us-east-1 \
-  --name oficina-api-dev-cluster
-```
+aws eks update-kubeconfig   --region us-east-1   --name oficina-api-dev-cluster
 
-Listar Nodes:
-
-```bash
 kubectl get nodes
-```
-
-Listar Pods:
-
-```bash
 kubectl get pods
-```
-
-Listar Services:
-
-```bash
 kubectl get svc
-```
-
-Ver Deployment:
-
-```bash
 kubectl get deployment
-```
-
-Ver HPA:
-
-```bash
 kubectl get hpa
-```
-
-Ver métricas:
-
-```bash
 kubectl top nodes
 kubectl top pods
+kubectl get pods -n newrelic
 ```
 
 ---
 
-# 🗑️ Destruição do ambiente
+## 🗑️ Destruição do ambiente
 
-Antes de destruir o EKS, remova recursos Kubernetes que criam infraestrutura externa na AWS.
-
-Principalmente o Service `LoadBalancer`:
+Antes de destruir o EKS, remova recursos Kubernetes que criam infraestrutura externa na AWS, principalmente o Service do tipo `LoadBalancer`.
 
 ```bash
 kubectl delete service oficina-api-service
@@ -684,13 +475,11 @@ kubectl get ingress -A
 
 Somente depois execute o destroy da infraestrutura.
 
-Em ambientes de laboratório AWS Academy, também pode ser utilizado o mecanismo de **Reset do LAB** para limpar todos os recursos temporários do ambiente.
-
-> Em ambientes reais, o ciclo de vida da infraestrutura deve preferencialmente continuar sendo controlado por Infrastructure as Code.
+Em ambientes do AWS Academy também pode ser utilizado o mecanismo de **Reset do LAB**.
 
 ---
 
-# 🔒 Segurança
+## 🔒 Segurança
 
 Nenhuma credencial AWS deve ser versionada no Git.
 
@@ -700,9 +489,8 @@ Os workflows utilizam GitHub Repository Secrets:
 AWS_ACCESS_KEY_ID
 AWS_SECRET_ACCESS_KEY
 AWS_SESSION_TOKEN
+NEW_RELIC_LICENSE_KEY
 ```
-
-Credenciais do banco e chave JWT são armazenadas no AWS Secrets Manager.
 
 Arquivos Terraform locais também não devem ser versionados:
 
@@ -712,19 +500,13 @@ Arquivos Terraform locais também não devem ser versionados:
 *.tfstate.*
 ```
 
-O arquivo:
-
-```text
-.terraform.lock.hcl
-```
-
-deve ser versionado para manter as versões dos providers reproduzíveis.
+O arquivo `.terraform.lock.hcl` deve permanecer versionado.
 
 ---
 
-# 📌 Estado atual
+## 📌 Estado atual
 
-Atualmente a infraestrutura já suporta:
+A infraestrutura deste repositório atualmente suporta:
 
 ```text
 ✅ VPC
@@ -734,13 +516,24 @@ Atualmente a infraestrutura já suporta:
 ✅ EC2 Node Group
 ✅ Amazon ECR
 ✅ Kubernetes Metrics Server
-✅ HPA
+✅ Suporte ao HPA
 ✅ Load Balancer da aplicação
 ✅ AWS API Gateway
 ✅ Roteamento API Gateway → Auth Lambda
-✅ Roteamento API Gateway → Spring Boot/EKS
+✅ Roteamento API Gateway → Spring Boot / EKS
 ✅ Terraform Remote State
-✅ CI/CD separado para infraestrutura e Gateway
+✅ CI/CD da infraestrutura
+✅ CI/CD do API Gateway
+✅ New Relic Kubernetes Integration
+✅ Monitoramento de CPU, memória, Pods, restarts e eventos Kubernetes
 ```
 
-Próximas evoluções previstas incluem o fortalecimento da autorização das rotas destinadas aos clientes e integração de observabilidade/monitoramento com New Relic.
+---
+
+## 🔗 Repositórios relacionados
+
+- **`oficina-dinoco`** — aplicação Java/Spring Boot e manifestos Kubernetes.
+- **`oficina-infra-db`** — PostgreSQL RDS e infraestrutura do banco.
+- **`oficina-auth-lambda`** — autenticação serverless de clientes por CPF.
+
+A documentação arquitetural completa da solução é mantida no repositório principal `oficina-dinoco`.
