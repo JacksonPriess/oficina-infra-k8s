@@ -14,3 +14,20 @@ resource "aws_ecr_repository" "oficina_api_repo" {
     Name = "${local.prefix}-ecr"
   }
 }
+
+# Repositorio exclusivo do microservico de Catalogo de Produtos.
+resource "aws_ecr_repository" "oficina_produto_repo" {
+  name                 = "oficina-produto-dev-repo"
+  image_tag_mutability = "MUTABLE"
+
+  # Segue o comportamento atual do ambiente de laboratorio.
+  force_delete = true
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = {
+    Name = "oficina-produto-dev-ecr"
+  }
+}
