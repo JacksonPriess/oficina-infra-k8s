@@ -33,6 +33,12 @@ resource "aws_eks_node_group" "eks_nodes" {
   # t3.medium é o standard recomendado para aguentar os recursos de sistema do Kubernetes e aplicações Spring Boot
   instance_types = ["t3.medium"]
 
+  # Novo ambiente: os nodes usam IMDSv2 com hop limit adequado ao driver CSI.
+  launch_template {
+    id      = aws_launch_template.eks_nodes.id
+    version = aws_launch_template.eks_nodes.latest_version
+  }
+
   depends_on = [
     aws_eks_cluster.eks_cluster
   ]

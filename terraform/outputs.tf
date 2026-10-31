@@ -32,3 +32,13 @@ output "ecr_repository_url" {
   description = "URL do repositorio ECR da aplicacao"
   value       = aws_ecr_repository.oficina_api_repo.repository_url
 }
+
+output "ecr_produto_repository_url" {
+  description = "URL do repositorio ECR do Catalogo de Produtos"
+  value       = aws_ecr_repository.oficina_produto_repo.repository_url
+}
+
+output "ebs_csi_addon_version" {
+  description = "Versao instalada do driver EBS CSI"
+  value       = aws_eks_addon.ebs_csi.addon_version
+}

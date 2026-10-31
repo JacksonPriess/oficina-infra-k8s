@@ -17,10 +17,14 @@ on:
       - "terraform-api-gateway/**"
       - ".github/workflows/api-gateway.yml"
 
+permissions:
+  contents: read
+
 env:
   AWS_REGION: us-east-1
   EKS_CLUSTER_NAME: oficina-api-dev-cluster
   TF_WORKING_DIR: ./terraform-api-gateway
+  K8S_NAMESPACE: default
 
 jobs:
 
@@ -29,7 +33,34 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6
 
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+
+      - name: Terraform Format
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform fmt -check
+
+      - name: Terraform Init sem backend
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init -backend=false -input=false
+
+      - name: Terraform Validate
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform validate
+
+  deploy:
+    name: Implantar API Gateway
+    needs: terraform
+    # Nesta fase, aplicar depois de EKS, Lambda e nucleo estarem implantados.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: api-gateway-oficina-dev
+      cancel-in-progress: false
+    steps:
       - name: Checkout
         uses: actions/checkout@v6
 
@@ -44,19 +75,10 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v4
 
-      - name: Terraform Format
+      - name: Terraform Init com backend S3
         working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform fmt -check
+        run: terraform init -input=false
 
-      - name: Terraform Init
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform init
-
-      - name: Terraform Validate
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform validate
-
-      # Acessar o Kubernetes para descobrir o endereço atual do LoadBalancer.
       - name: Configure kubectl
         run: |
           aws eks update-kubeconfig \
@@ -67,33 +89,28 @@ jobs:
         id: backend
         run: |
           LB_HOST=$(kubectl get svc oficina-api-service \
+            -n "$K8S_NAMESPACE" \
             -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
 
           if [ -z "$LB_HOST" ]; then
-            echo "LoadBalancer da aplicação não encontrado."
+            echo "LoadBalancer do nucleo ainda nao esta disponivel. Implante o nucleo antes do API Gateway."
             exit 1
           fi
 
           BACKEND_URL="http://$LB_HOST"
-
           echo "Backend encontrado: $BACKEND_URL"
           echo "backend_url=$BACKEND_URL" >> "$GITHUB_OUTPUT"
 
       - name: Terraform Plan
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
-          terraform plan \
+          terraform plan -input=false -out=api-gateway.tfplan \
             -var="backend_url=${{ steps.backend.outputs.backend_url }}"
 
-      - name: Terraform Apply
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+      - name: Terraform Apply do plano gerado
         working-directory: ${{ env.TF_WORKING_DIR }}
-        run: |
-          terraform apply \
-            -auto-approve \
-            -var="backend_url=${{ steps.backend.outputs.backend_url }}"
+        run: terraform apply -input=false api-gateway.tfplan
 
       - name: Show API Gateway URL
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform output api_gateway_url
