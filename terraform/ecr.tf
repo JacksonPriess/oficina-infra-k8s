@@ -20,7 +20,7 @@ resource "aws_ecr_repository" "oficina_produto_repo" {
   name                 = "oficina-produto-dev-repo"
   image_tag_mutability = "MUTABLE"
 
-  # Segue o comportamento atual do ambiente de laboratorio.
+  # Mantem o comportamento de destruicao adotado para o ambiente de laboratorio.
   force_delete = true
 
   image_scanning_configuration {

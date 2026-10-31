@@ -1,0 +1,13 @@
+# Configuracao operacional do broker
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rabbitmq-config
+data:
+  rabbitmq.conf: |
+    listeners.tcp.default = 5672
+    management.tcp.port = 15672
+    log.console = true
+    log.console.level = info
+    vm_memory_high_watermark.absolute = 512MiB
+    disk_free_limit.absolute = 1GB
