@@ -31,3 +31,31 @@ resource "aws_ecr_repository" "oficina_produto_repo" {
     Name = "oficina-produto-dev-ecr"
   }
 }
+
+resource "aws_ecr_repository" "oficina_financeiro_repo" {
+  name                 = "oficina-financeiro-dev-repo"
+  image_tag_mutability = "MUTABLE"
+  force_delete         = true
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = {
+    Name = "oficina-financeiro-dev-ecr"
+  }
+}
+
+resource "aws_ecr_repository" "oficina_provedor_mock_repo" {
+  name                 = "oficina-provedor-mock-dev-repo"
+  image_tag_mutability = "MUTABLE"
+  force_delete         = true
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = {
+    Name = "oficina-provedor-mock-dev-ecr"
+  }
+}
