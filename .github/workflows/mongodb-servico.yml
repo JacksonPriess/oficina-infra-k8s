@@ -1,0 +1,60 @@
+name: Deploy MongoDB do Catálogo de Serviços
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - "database/mongodb/**"
+      - "scripts/deploy-mongodb-servico.sh"
+      - ".github/workflows/mongodb-servico.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mongodb-servico-oficina-dev
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  EKS_CLUSTER_NAME: oficina-api-dev-cluster
+  K8S_NAMESPACE: default
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Validar sintaxe shell e YAML
+        run: |
+          bash -n scripts/deploy-mongodb-servico.sh
+          python3 -m pip install --disable-pip-version-check PyYAML==6.0.2
+          python3 - <<'PY'
+          from pathlib import Path
+          import yaml
+          for path in Path("database/mongodb").glob("*.yaml"):
+              list(yaml.safe_load_all(path.read_text()))
+              print(f"YAML valido: {path}")
+          PY
+
+  deploy:
+    needs: validate
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Configurar credenciais AWS
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Configurar kubeconfig
+        run: aws eks update-kubeconfig --region "$AWS_REGION" --name "$EKS_CLUSTER_NAME"
+      - name: Implantar MongoDB persistente
+        env:
+          MONGODB_SERVICO_ADMIN_PASSWORD: ${{ secrets.MONGODB_SERVICO_ADMIN_PASSWORD }}
+          MONGODB_SERVICO_APP_PASSWORD: ${{ secrets.MONGODB_SERVICO_APP_PASSWORD }}
+        run: bash scripts/deploy-mongodb-servico.sh

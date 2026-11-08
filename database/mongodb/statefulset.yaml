@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb-servico
+spec:
+  serviceName: mongodb-servico-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb-servico
+  template:
+    metadata:
+      labels:
+        app: mongodb-servico
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: mongodb
+          image: mongo:8.0
+          ports:
+            - name: mongodb
+              containerPort: 27017
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              value: mongodb_admin
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-servico-admin
+                  key: password
+            - name: MONGODB_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: catalogo-servico-mongodb
+                  key: password
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -ec
+                - >-
+                  mongosh --quiet --host "$POD_IP" --port 27017 --eval
+                  'const app = db.getSiblingDB("oficina_servicos_db");
+                  app.auth("catalogo_servico_app", process.env.MONGODB_APP_PASSWORD);
+                  if (app.runCommand({ listCollections: 1, nameOnly: true }).ok !== 1) quit(1);'
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          volumeMounts:
+            - name: data
+              mountPath: /data/db
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+      volumes:
+        - name: init
+          configMap:
+            name: mongodb-servico-init
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: mongodb-servico-gp3
+        resources:
+          requests:
+            storage: 5Gi
