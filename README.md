@@ -14,7 +14,8 @@ Este repositório é responsável por:
 - criar Internet Gateway e rotas de rede;
 - provisionar o Amazon EKS;
 - criar o EC2 Node Group do cluster;
-- criar o Amazon ECR utilizado pela aplicação;
+- criar os repositórios de imagens no Amazon ECR;
+- implantar o RabbitMQ compartilhado com armazenamento persistente;
 - instalar o Kubernetes Metrics Server;
 - disponibilizar a infraestrutura necessária para uso do HPA;
 - provisionar o AWS API Gateway;
@@ -30,11 +31,12 @@ Este repositório é responsável por:
 
 ![Arquitetura da infraestrutura Kubernetes](docs/architecture/oficina-infra-k8s-architecture.drawio.png)
 
-O repositório mantém três blocos principais:
+O repositório mantém quatro blocos principais:
 
 1. **Infraestrutura base** — VPC, Subnets, EKS, EC2 Node Group e ECR.
 2. **Entrada da solução** — API Gateway e suas integrações.
 3. **Observabilidade Kubernetes** — New Relic Kubernetes Integration instalada no cluster.
+4. **Mensageria interna** — RabbitMQ para os eventos de estoque e a Saga de pagamento.
 
 O fluxo principal é:
 
@@ -56,6 +58,7 @@ Dentro do EKS:
 - Metrics Server
 - HPA
 - New Relic Kubernetes Integration (nri-bundle)
+- RabbitMQ com armazenamento persistente
 ```
 
 ---
@@ -68,7 +71,19 @@ oficina-infra-k8s/
 │   └── workflows/
 │       ├── terraform.yaml
 │       ├── api-gateway.yml
+│       ├── rabbitmq.yml
 │       └── observability.yml
+│
+├── messaging/
+│   └── rabbitmq/
+│       ├── README.md
+│       ├── configmap.yaml
+│       ├── service.yaml
+│       ├── statefulset.yaml
+│       └── storageclass.yaml
+│
+├── scripts/
+│   └── deploy-rabbitmq.sh
 │
 ├── observability/
 │   └── newrelic-values.yaml
@@ -81,6 +96,7 @@ oficina-infra-k8s/
 │   ├── network.tf
 │   ├── outputs.tf
 │   ├── providers.tf
+│   ├── storage.tf
 │   └── .terraform.lock.hcl
 │
 ├── terraform-api-gateway/
@@ -116,10 +132,19 @@ EKS
 └── EC2 Node Group
 
 ECR
-└── Repositório Docker da aplicação
+├── oficina-api-dev-repo
+├── oficina-produto-dev-repo
+├── oficina-financeiro-dev-repo
+└── oficina-provedor-mock-dev-repo
 ```
 
 O Node Group utiliza instâncias EC2 para executar os Pods da aplicação.
+
+### RabbitMQ
+
+O workflow `rabbitmq.yml` implanta o broker no EKS. Núcleo, catálogo de produtos e financeiro usam o Service interno `rabbitmq` na porta AMQP `5672`. O volume persistente é provisionado pelo driver Amazon EBS CSI, que conecta volumes de bloco da AWS ao Kubernetes.
+
+Os manifests, as credenciais, os fluxos e os comandos de diagnóstico estão no [guia do RabbitMQ](messaging/rabbitmq/README.md).
 
 ### API Gateway
 
@@ -325,6 +350,10 @@ kubectl get svc oficina-api-service   -o jsonpath='{.status.loadBalancer.ingress
 
 e fornecido ao Terraform como `backend_url`.
 
+### `rabbitmq.yml`
+
+Valida os manifests e o script em PRs. O deploy pode ser acionado manualmente ou por alterações nos arquivos do broker na `main`. Também é acionado após a conclusão bem-sucedida do workflow de infraestrutura iniciado por um push na `main`. Veja os pré-requisitos e o procedimento no [guia do RabbitMQ](messaging/rabbitmq/README.md).
+
 ### `observability.yml`
 
 Responsável pela integração Kubernetes do New Relic.
@@ -417,21 +446,25 @@ Criar o bucket para states do terraform
 
 ```text
 1. oficina-infra-k8s
-   VPC + EKS + ECR
+   VPC + EKS + ECR + driver de volumes EBS
 
-2. oficina-infra-db
-   PostgreSQL RDS
+2. oficina-infra-k8s
+   RabbitMQ persistente no EKS
 
-3. oficina-auth-lambda
+3. oficina-infra-db
+   RDS PostgreSQL + bootstrap dos bancos e Secrets de aplicação
+
+4. oficina-auth-lambda
    Lambda + integração VPC + Secrets
 
-4. oficina-dinoco
-   Build + Docker + ECR + Deployment + Service
-
-5. oficina-infra-k8s
-   Workflow do API Gateway
+5. Aplicações
+   Catálogo de produtos e núcleo
+   Financeiro e mock após o provisionamento do banco e dos repositórios ECR
 
 6. oficina-infra-k8s
+   Workflow do API Gateway
+
+7. oficina-infra-k8s
    Workflow de Observabilidade
 ```
 
@@ -515,6 +548,7 @@ A infraestrutura deste repositório atualmente suporta:
 ✅ Amazon EKS
 ✅ EC2 Node Group
 ✅ Amazon ECR
+✅ RabbitMQ persistente com volume EBS
 ✅ Kubernetes Metrics Server
 ✅ Suporte ao HPA
 ✅ Load Balancer da aplicação
@@ -544,7 +578,9 @@ Os repositórios são criados pelo workflow de infraestrutura. A publicação da
 ## 🔗 Repositórios relacionados
 
 - **`oficina-dinoco`** — aplicação Java/Spring Boot e manifestos Kubernetes.
-- **`oficina-infra-db`** — PostgreSQL RDS e infraestrutura do banco.
+- **`oficina-infra-db`** — PostgreSQL RDS e bootstrap dos bancos de aplicação.
+- **`oficina-produto-api`** — catálogo de produtos e publicação de eventos de estoque.
+- **`oficina-financeiro-api`** — processamento de pagamentos e provedor simulado.
 - **`oficina-auth-lambda`** — autenticação serverless de clientes por CPF.
 
 A documentação arquitetural completa da solução é mantida no repositório principal `oficina-dinoco`.
