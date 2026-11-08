@@ -59,3 +59,17 @@ resource "aws_ecr_repository" "oficina_provedor_mock_repo" {
     Name = "oficina-provedor-mock-dev-ecr"
   }
 }
+
+resource "aws_ecr_repository" "oficina_servico_repo" {
+  name                 = "oficina-servico-dev-repo"
+  image_tag_mutability = "MUTABLE"
+  force_delete         = true
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = {
+    Name = "oficina-servico-dev-ecr"
+  }
+}
