@@ -530,6 +530,17 @@ A infraestrutura deste repositório atualmente suporta:
 
 ---
 
+## Imagens do financeiro
+
+O Terraform provisiona os repositórios privados abaixo no Amazon Elastic Container Registry (ECR), com verificação de vulnerabilidades no envio das imagens.
+
+| Componente | Repositório ECR |
+| --- | --- |
+| API financeira | `oficina-financeiro-dev-repo` |
+| Provedor simulado | `oficina-provedor-mock-dev-repo` |
+
+Os repositórios são criados pelo workflow de infraestrutura. A publicação das imagens e a implantação no EKS pertencem ao workflow do serviço financeiro.
+
 ## 🔗 Repositórios relacionados
 
 - **`oficina-dinoco`** — aplicação Java/Spring Boot e manifestos Kubernetes.
