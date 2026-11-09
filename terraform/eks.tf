@@ -25,7 +25,7 @@ resource "aws_eks_node_group" "eks_nodes" {
 
   # Configuração de escala económica para laboratório
   scaling_config {
-    desired_size = 1 # Começamos com 1 servidor apenas
+    desired_size = 2 # Começamos com 2 servidor apenas
     max_size     = 2 # Se a carga aumentar, o Kubernetes pode pedir até 2
     min_size     = 1 # Nunca fica com menos de 1
   }
